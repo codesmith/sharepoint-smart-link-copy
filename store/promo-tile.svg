@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4F46E5"/><stop offset="1" stop-color="#A21CAF"/></linearGradient>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1E1B4B"/><stop offset="1" stop-color="#4A044E"/></linearGradient></defs>
+<rect width="440" height="280" fill="url(#bg)"/>
+<circle cx="380" cy="40" r="110" fill="#A21CAF" opacity="0.18"/>
+<circle cx="40" cy="270" r="90" fill="#4F46E5" opacity="0.22"/>
+<g transform="translate(36 76)">
+<rect x="0" y="0" width="128" height="128" rx="30" fill="url(#g)"/>
+<g transform="translate(64 64) scale(1.4) translate(-64 -64) rotate(-45 64 64)"><g fill="none" stroke-width="9"><rect x="30" y="52" width="40" height="24" rx="12" stroke="#FFFFFF"/><rect x="58" y="52" width="40" height="24" rx="12" stroke="#FBBF24"/><path d="M50 52 H58 A12 12 0 0 1 69.28 59.9" stroke="#FFFFFF"/></g></g></g>
+<text x="188" y="128" font-family="Ubuntu" font-weight="bold" font-size="34" fill="#FFFFFF">Smart Link</text>
+<text x="188" y="166" font-family="Ubuntu" font-weight="bold" font-size="34" fill="#FBBF24">Copy</text>
+<text x="188" y="200" font-family="Ubuntu" font-size="15" fill="#C7D2FE">Copy links with context,</text>
+<text x="188" y="220" font-family="Ubuntu" font-size="15" fill="#C7D2FE">in one right-click.</text>
+</svg>

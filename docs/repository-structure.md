@@ -7,6 +7,7 @@ smart-link-copy/
 ├── manifest.json           # Chrome拡張機能マニフェスト(Manifest V3)
 ├── public/                 # ビルドを経ずにそのまま拡張機能に含める静的ファイル
 │   └── icons/               # 拡張機能アイコン
+├── store/                  # Chrome Web Store掲載用の素材(アイコン・タイルのSVG原本と書き出したPNG。拡張機能には含めない)
 ├── src/                     # ソースコード(TypeScript)
 │   ├── background/          # Background Service Worker
 │   ├── content/              # Content Script
@@ -164,6 +165,20 @@ tests/integration/
 - `icons/icon16.png`, `icons/icon48.png`, `icons/icon128.png`: 拡張機能アイコン(Chrome Web Store/社内配布パッケージ用)
 
 **依存関係**: ビルド処理を経由せず、`dist/`へそのままコピーして配置する
+
+**アイコンの原本**: `store/icon-full.svg`(16/48px用。余白なし)、`store/icon.svg`(128px用。絵柄96px+透明余白16px)
+
+### store/ (Chrome Web Store掲載素材ディレクトリ)
+
+**配置ファイル**:
+- `icon.svg` / `icon-full.svg`: アイコンのSVG原本(`public/icons/`のPNGはここから書き出す)
+- `promo-tile.svg`: プロモーション用タイル(小)のSVG原本
+- `store-icon-128.png`: ストアアイコン(128×128px、透過余白付き)
+- `promo-tile-440x280.png`: プロモーション用タイル(小)
+- `screenshot-1-1280x800.png`: ストア用スクリーンショット(原本は`screenshot-1.svg`。元の画面写真は`screenshot-1-source.png`)
+
+**依存関係**: ビルド対象外(`dist/`にはコピーしない)。PNGの書き出しはプロジェクトの依存パッケージを増やさないため、
+SVGを変更したときに外部ツール(resvg等)で手動で行う
 
 ## ファイル配置規則
 
