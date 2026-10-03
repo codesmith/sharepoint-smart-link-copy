@@ -8,8 +8,15 @@ import {
 import { readSelectedItemNames } from './SelectionReader.js';
 import { SelectionTracker } from './SelectionTracker.js';
 import { readBreadcrumbRootLabel } from './BreadcrumbRootLabelReader.js';
+import { resolveBacklogIssueContext } from './BacklogIssueResolver.js';
+import {
+  readBacklogIssueSummary,
+  readBacklogProjectName,
+} from './BacklogIssueReader.js';
+import { buildBacklogLinkResult } from './BacklogLinkBuilder.js';
 import { BreadcrumbResolutionError } from '../shared/errors.js';
 import { SMART_LINK_COPY_MESSAGE } from '../shared/messages.js';
+import type { BacklogIssueContext, ClipboardContent } from '../shared/types';
 
 const clipboardWriter = new ClipboardWriter();
 const selectionTracker = new SelectionTracker();
@@ -48,31 +55,60 @@ function showErrorToast(message: string): void {
 // (`[data-automationid="breadcrumb-crumb"]`)の先頭要素は、OneDriveなら「マイファイル」、SharePointなら
 // サイト名を表示しているため、取得できた場合はそちらを起点ラベルとして優先する
 // (取得できない場合は従来通りURLベースの起点のまま)。
+function buildSharePointContent(): ClipboardContent {
+  const context = resolvePageContext(window.location.href);
+  if (!context) {
+    throw new BreadcrumbResolutionError(
+      'フォルダー階層を取得できませんでした',
+      'url-parse-failed'
+    );
+  }
+
+  let segments = buildAncestorFolders(context);
+  const rootLabel = readBreadcrumbRootLabel(document);
+  // 実機でDOM構造が想定と異なり起点ラベルを取得できない場合の切り分け用
+  console.debug('[Smart Link Copy] 起点ラベル', rootLabel);
+  if (rootLabel) {
+    segments = replaceRootLabel(segments, rootLabel);
+  }
+
+  const selectedItems =
+    selectionTracker.getSnapshot() ?? readSelectedItemNames(document);
+  // 実機でDOM構造が想定と異なり選択アイテムを取得できない場合の切り分け用
+  console.debug('[Smart Link Copy] 選択アイテム', selectedItems);
+
+  return buildBreadcrumbResult(segments, selectedItems);
+}
+
+// Backlogの課題ページでは「プロジェクト名 > 課題名」と課題URLをコピーする。
+// プロジェクト名はページ上部のヘッダーから読むが、取得できない場合もコピー自体は成立させるため
+// URLのプロジェクトキー(例: SPRING)で代替する。課題名は代替手段が無いため、取得できなければエラーにする。
+function buildBacklogContent(context: BacklogIssueContext): ClipboardContent {
+  const projectName = readBacklogProjectName(document);
+  const issueSummary = readBacklogIssueSummary(document);
+  // 実機でDOM構造が想定と異なり取得できない場合の切り分け用
+  console.debug('[Smart Link Copy] Backlog', { projectName, issueSummary });
+  if (!issueSummary) {
+    throw new BreadcrumbResolutionError(
+      'Backlogの課題名を取得できませんでした',
+      'backlog-issue-not-found'
+    );
+  }
+
+  return buildBacklogLinkResult({
+    projectName: projectName ?? context.projectKey,
+    issueSummary,
+    issueUrl: context.issueUrl,
+  });
+}
+
 export async function runSmartLinkCopy(): Promise<void> {
   try {
-    const context = resolvePageContext(window.location.href);
-    if (!context) {
-      throw new BreadcrumbResolutionError(
-        'フォルダー階層を取得できませんでした',
-        'url-parse-failed'
-      );
-    }
-
-    let segments = buildAncestorFolders(context);
-    const rootLabel = readBreadcrumbRootLabel(document);
-    // 実機でDOM構造が想定と異なり起点ラベルを取得できない場合の切り分け用
-    console.debug('[Smart Link Copy] 起点ラベル', rootLabel);
-    if (rootLabel) {
-      segments = replaceRootLabel(segments, rootLabel);
-    }
-
-    const selectedItems =
-      selectionTracker.getSnapshot() ?? readSelectedItemNames(document);
-    // 実機でDOM構造が想定と異なり選択アイテムを取得できない場合の切り分け用
-    console.debug('[Smart Link Copy] 選択アイテム', selectedItems);
-
-    const result = buildBreadcrumbResult(segments, selectedItems);
-    await clipboardWriter.write(result);
+    const backlogContext = resolveBacklogIssueContext(window.location.href);
+    const content = backlogContext
+      ? buildBacklogContent(backlogContext)
+      : buildSharePointContent();
+    await clipboardWriter.write(content);
   } catch (error) {
     if (error instanceof BreadcrumbResolutionError) {
       showErrorToast('Smart Link Copyに失敗しました。もう一度お試しください');

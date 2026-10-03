@@ -32,14 +32,15 @@ describe('BreadcrumbResolutionError', () => {
     expect(error.sourceError).toBe(original);
   });
 
-  it.each(['url-parse-failed', 'clipboard-write-failed'] as const)(
-    'causeに%sを設定できる',
-    (cause) => {
-      // Given/When: 準備と実行
-      const error = new BreadcrumbResolutionError('エラー', cause);
+  it.each([
+    'url-parse-failed',
+    'backlog-issue-not-found',
+    'clipboard-write-failed',
+  ] as const)('causeに%sを設定できる', (cause) => {
+    // Given/When: 準備と実行
+    const error = new BreadcrumbResolutionError('エラー', cause);
 
-      // Then: 検証
-      expect(error.cause).toBe(cause);
-    }
-  );
+    // Then: 検証
+    expect(error.cause).toBe(cause);
+  });
 });

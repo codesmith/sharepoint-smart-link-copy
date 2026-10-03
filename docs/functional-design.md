@@ -5,7 +5,7 @@
 ```mermaid
 graph TB
     User[ユーザー]
-    Page[SharePoint/OneDriveページ]
+    Page[SharePoint/OneDrive/Backlogページ]
     ContentScript[Content Script]
     Background[Background Service Worker<br/>ContextMenuController]
     Clipboard[(OSクリップボード)]
@@ -13,11 +13,11 @@ graph TB
     User -->|右クリック| Page
     User -->|「Smart Link Copy」をクリック| Background
     Background -->|chrome.tabs.sendMessage| ContentScript
-    ContentScript -->|現在のURLを解析 / 選択アイテム名を読み取り| Page
+    ContentScript -->|現在のURLを解析 / 選択アイテム名・課題名等を読み取り| Page
     ContentScript -->|navigator.clipboard.write| Clipboard
 ```
 
-- バックエンドサーバー・API連携は存在しない(Microsoft 365認証・Graph API等は使用しない)
+- バックエンドサーバー・API連携は存在しない(Microsoft 365認証・Graph API・Backlog API等は使用しない)
 - すべての処理はブラウザ内(Content Script / Background Service Worker)で完結する
 - **右クリックされたDOM要素(ファイル/フォルダー行)は一切見ない**。詳細は下記「設計方針の変更」を参照
 
@@ -53,6 +53,14 @@ graph TB
 
 ファイル自体へのリンク付与はPost-MVPとする(ファイルの実リンクはURLから構築できないため。
 `docs/product-requirements.md`のPost-MVPセクション参照)。
+
+### Backlog課題リンクコピーの追加
+
+Backlogの課題詳細ページ(`https://<スペース>.backlog.com/view/<課題キー>`)でも「Smart Link Copy」を使えるようにした。
+Content Script(`index.ts`)は、まず現在のURLがBacklogの課題ページかどうかを`BacklogIssueResolver`で判定し、
+該当すればBacklog用の処理(プロジェクト名・課題名・課題URLのコピー)、該当しなければ従来のSharePoint/OneDrive用の処理を行う。
+SharePoint/OneDriveと同じく、URL解析(`BacklogIssueResolver`)と整形(`BacklogLinkBuilder`)は純粋関数、
+DOM依存(`BacklogIssueReader`)は専用モジュールに閉じ込める。
 
 ## 技術スタック
 
@@ -118,6 +126,35 @@ interface BreadcrumbResult {
 - 1行目(パンくず)の`html`は `segments` の各要素を、`url`があれば`<a href="...">label</a>`、無ければエスケープ済みテキストとして、` > ` で連結したもの
 - `selectedItems`が1件以上ある場合、2行目以降を追加する(下記「出力フォーマット仕様」参照)
 
+### エンティティ: ClipboardContent
+
+クリップボードに書き込む内容の共通形。`BreadcrumbResult`はこれを継承し、Backlog用の整形結果はこの型そのものを返す。
+
+```typescript
+interface ClipboardContent {
+  html: string; // text/html
+  text: string; // text/plain
+}
+```
+
+### エンティティ: BacklogIssueContext / BacklogIssueLink
+
+```typescript
+// Backlogの課題ページURLから読み取れる情報
+interface BacklogIssueContext {
+  issueKey: string;   // 例: SPRING-3
+  projectKey: string; // 例: SPRING(プロジェクト名を取得できない場合の代替に使う)
+  issueUrl: string;   // 例: https://yonespring.backlog.com/view/SPRING-3(origin + pathname)
+}
+
+// 整形の入力
+interface BacklogIssueLink {
+  projectName: string;
+  issueSummary: string;
+  issueUrl: string;
+}
+```
+
 ### 出力フォーマット仕様
 
 | 項目 | 内容 |
@@ -138,12 +175,28 @@ interface BreadcrumbResult {
 　┗ Cropped_Image.png
 ```
 
+### 出力フォーマット仕様(Backlog)
+
+| 項目 | 内容 |
+|------|------|
+| 1行目 | `プロジェクト名 > 課題名`(区切りはパンくずと同じ` > `) |
+| 2行目 | 課題URL。HTMLでは`<a href="課題URL">課題URL</a>` |
+| エスケープ | HTML出力ではプロジェクト名・課題名・URLをエスケープする |
+| 行区切り | plain textは`\n`、HTMLは`<br>` |
+
+出力例(plain text):
+
+```
+Spring開発標準 > 【アプリケーション方式設計書_1はじめに.xlsx】1.1 本書の目的
+https://yonespring.backlog.com/view/SPRING-3
+```
+
 ## コンポーネント設計
 
 ### ContextMenuController(Background Service Worker)
 
 **責務**:
-- 拡張機能インストール時に「Smart Link Copy」コンテキストメニューを登録する(表示対象は SharePoint/OneDrive のドキュメントURLのみに限定する)
+- 拡張機能インストール時に「Smart Link Copy」コンテキストメニューを登録する(表示対象は SharePoint/OneDrive のドキュメントURLと、Backlogの課題詳細ページ(`*://*.backlog.com/view/*`・`.backlog.jp`・`.backlogtool.com`)に限定する)
 - メニュークリック(`chrome.contextMenus.onClicked`)を検知し、対象タブの Content Script にコピー処理の実行を指示する
 
 **インターフェース**:
@@ -256,15 +309,60 @@ function buildBreadcrumbResult(segments: BreadcrumbSegment[], selectedItems?: st
 
 **依存関係**: なし(純粋なデータ変換処理)
 
+### BacklogIssueResolver(Content Script)
+
+**責務**:
+- 現在のURLがBacklogの課題詳細ページ(ホストが`*.backlog.com`/`*.backlog.jp`/`*.backlogtool.com`、
+  pathnameが`/view/<プロジェクトキー>-<番号>`)かを判定し、`BacklogIssueContext`を生成する
+- 課題URLは`origin + pathname`とし、`#comment-xxx`等のハッシュ・クエリは除去する
+
+**インターフェース**:
+```typescript
+function resolveBacklogIssueContext(url: string): BacklogIssueContext | null; // 課題ページでなければnull
+```
+
+**依存関係**: なし(URL文字列処理のみ)
+
+### BacklogIssueReader(Content Script)
+
+**責務**:
+- プロジェクト名: `.header-icon-set__name`のテキスト
+- 課題名: 次の優先順で件名欄の`.markdown-body`を読む(説明文・コメントも`.markdown-body`を使うため、件名欄に限定する)
+  1. `[data-testid="issueSummary"] .markdown-body`
+  2. `#summary .markdown-body`
+  3. `.header-icon-set__summary .markdown-body`(スクロール時に表示される固定ヘッダー)
+- 空白を正規化し、見つからなければ`null`を返す(例外にしない)
+
+**インターフェース**:
+```typescript
+function readBacklogProjectName(root: ParentNode): string | null;
+function readBacklogIssueSummary(root: ParentNode): string | null;
+```
+
+**依存関係**: BacklogのDOM構造(実機の課題ページHTMLで確認済み)。UI変更の影響は受けうる
+
+### BacklogLinkBuilder(Content Script)
+
+**責務**:
+- `BacklogIssueLink`を、上記「出力フォーマット仕様(Backlog)」に従って`ClipboardContent`に変換する
+  (HTMLエスケープは`BreadcrumbBuilder.escapeHtml`を再利用)
+
+**インターフェース**:
+```typescript
+function buildBacklogLinkResult(link: BacklogIssueLink): ClipboardContent;
+```
+
+**依存関係**: なし(純粋なデータ変換処理)
+
 ### ClipboardWriter(Content Script)
 
 **責務**:
-- `BreadcrumbResult` をクリップボードに書き込む(`text/html` と `text/plain` の両方)
+- `ClipboardContent`(`BreadcrumbResult`またはBacklog用の整形結果)をクリップボードに書き込む(`text/html` と `text/plain` の両方)
 
 **インターフェース**:
 ```typescript
 class ClipboardWriter {
-  write(result: BreadcrumbResult): Promise<void>;
+  write(content: ClipboardContent): Promise<void>;
 }
 ```
 
@@ -323,6 +421,29 @@ sequenceDiagram
 8. `ClipboardWriter` がクリップボードへ書き込む
 9. ユーザーはTeams/OneNoteに貼り付けて共有する
 
+### Smart Link Copyの実行(Backlog)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Menu as ContextMenuController(Background)
+    participant ContentScript as Content Script(index.ts)
+    participant Resolver as BacklogIssueResolver
+    participant Reader as BacklogIssueReader
+    participant Builder as BacklogLinkBuilder
+    participant Writer as ClipboardWriter
+
+    User->>Menu: 課題ページで右クリック→「Smart Link Copy」をクリック
+    Menu->>ContentScript: chrome.tabs.sendMessage(SMART_LINK_COPY_MESSAGE)
+    ContentScript->>Resolver: resolveBacklogIssueContext(window.location.href)
+    Resolver-->>ContentScript: BacklogIssueContext(nullならSharePoint/OneDriveの処理へ)
+    ContentScript->>Reader: readBacklogProjectName(document) / readBacklogIssueSummary(document)
+    Reader-->>ContentScript: プロジェクト名(nullならプロジェクトキーで代替) / 課題名
+    ContentScript->>Builder: buildBacklogLinkResult(link)
+    Builder-->>ContentScript: ClipboardContent
+    ContentScript->>Writer: write(content)
+```
+
 ## コピー処理の状態遷移
 
 ```mermaid
@@ -330,7 +451,7 @@ stateDiagram-v2
     [*] --> Idle
     Idle --> Resolving: 「Smart Link Copy」クリック
     Resolving --> Building: PageContext解析成功
-    Resolving --> Error: PageContext解析失敗(idパラメータ取得不可等)
+    Resolving --> Error: PageContext解析失敗(idパラメータ取得不可等)/Backlogの課題名取得失敗
     Building --> Writing: BreadcrumbResult生成成功
     Writing --> Success: クリップボード書き込み成功
     Writing --> Error: クリップボード書き込み失敗
@@ -486,8 +607,10 @@ function buildAncestorFolders(context: PageContext): BreadcrumbSegment[] {
 | エラー種別 | 処理 | ユーザーへの表示 |
 |-----------|------|-----------------|
 | URLの`id`パラメータが取得できない/想定外形式 | 処理を中断し、クリップボードは変更しない | 「フォルダー階層を取得できませんでした」 |
+| Backlogの課題名を取得できない(DOM構造が想定外) | 処理を中断し、クリップボードは変更しない(`cause: 'backlog-issue-not-found'`) | 「Smart Link Copyに失敗しました。もう一度お試しください」 |
+| Backlogのプロジェクト名を取得できない | 例外にせず、URLのプロジェクトキー(例: `SPRING`)で代替する | 表示なし(コンソールに取得結果を出力) |
 | クリップボードへの書き込み失敗(権限拒否等) | 処理を中断 | 「Smart Link Copyに失敗しました。もう一度お試しください」 |
-| SharePoint/OneDrive以外のページ | そもそもコンテキストメニュー項目を表示しない(`documentUrlPatterns`で制御) | 表示なし |
+| SharePoint/OneDrive・Backlog課題ページ以外のページ | そもそもコンテキストメニュー項目を表示しない(`documentUrlPatterns`で制御) | 表示なし |
 | ファイル/フォルダー行の右クリック | SharePoint/OneDrive自身の独自メニューにブラウザメニューごと抑制され、拡張機能側では検知できない(既知の制約) | 表示なし |
 | 選択アイテム名を取得できない(DOM構造が想定外/選択なし) | 例外にせず「選択なし」として扱い、パンくずのみをコピーする | 表示なし(コンソールに`console.debug`で取得結果を出力し、切り分けに使う) |
 | パンくずUIから起点ラベルを取得できない(DOM構造が想定外) | 例外にせず、起点をURLベースの値のままにする | 表示なし(コンソールに取得結果を出力し、切り分けに使う) |
@@ -509,6 +632,9 @@ function buildAncestorFolders(context: PageContext): BreadcrumbSegment[] {
 - `BreadcrumbRootLabelReader.readBreadcrumbRootLabel`: 実際のパンくずDOM構造からの取得、title属性/テキストの
   フォールバック、見つからない場合に`null`、空白の正規化
 - `SelectionTracker`: 右クリックの`mousedown`後に選択が解除されても、`mousedown`時点の選択が保持されること
+- `BacklogIssueResolver.resolveBacklogIssueContext`: 各ドメイン、課題ページ以外でnull、クエリ・ハッシュの除去
+- `BacklogIssueReader`: 実際の課題ページDOMからの取得、件名欄以外の`.markdown-body`を拾わないこと、各フォールバック
+- `BacklogLinkBuilder.buildBacklogLinkResult`: ユーザー指定フォーマットとの完全一致、HTMLエスケープ
 - HTML生成処理: XSSを狙った特殊文字を含むフォルダー名・アイテム名のエスケープ
 
 ### 統合テスト
@@ -527,4 +653,6 @@ function buildAncestorFolders(context: PageContext): BreadcrumbSegment[] {
 - SharePointチームサイトで実行し、起点がドキュメントライブラリ名ではなくサイト名になることを確認する
   (取得できない場合は、ページのコンソールで`[Smart Link Copy] 起点ラベル`のログを確認し、実際のDOM構造に
   合わせて`BreadcrumbRootLabelReader`のセレクターを調整する)
-- (自動E2Eは対象がMicrosoft 365実環境に依存するため、MVPでは手動確認とする)
+- Backlogの課題ページで実行し、「プロジェクト名 > 課題名」と課題URLの2行が貼り付けられることを確認する
+  (取得できない場合は、ページのコンソールで`[Smart Link Copy] Backlog`のログを確認する)
+- (自動E2Eは対象がMicrosoft 365/Backlog実環境に依存するため、MVPでは手動確認とする)

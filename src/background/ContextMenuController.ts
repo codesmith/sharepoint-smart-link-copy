@@ -5,6 +5,10 @@ export const SMART_LINK_COPY_MENU_ID = 'smart-link-copy';
 const TARGET_URL_PATTERNS = [
   '*://*.sharepoint.com/*',
   '*://onedrive.live.com/*',
+  // Backlogは課題詳細ページ(/view/<課題キー>)でのみメニューを表示する
+  '*://*.backlog.com/view/*',
+  '*://*.backlog.jp/view/*',
+  '*://*.backlogtool.com/view/*',
 ];
 const CONTENT_SCRIPT_PATH = 'content/index.js';
 

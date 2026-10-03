@@ -1,4 +1,4 @@
-# Smart Link Copy（smart-sharepoint-link）- アイデアメモ
+# Smart Link Copy（smart-link-copy）- アイデアメモ
 
 ## このドキュメントの位置づけ
 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Smart Link Copy",
   "version": "0.1.0",
-  "description": "SharePoint/OneDriveのファイル・フォルダーを右クリックし、フォルダー階層付きのリンクをコピーする拡張機能",
+  "description": "SharePoint/OneDriveのフォルダー階層付きリンクや、Backlogのプロジェクト名・課題名付きリンクを右クリックでコピーする拡張機能",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -14,17 +14,35 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.sharepoint.com/*", "*://onedrive.live.com/*"],
+      "matches": [
+        "*://*.sharepoint.com/*",
+        "*://onedrive.live.com/*",
+        "*://*.backlog.com/*",
+        "*://*.backlog.jp/*",
+        "*://*.backlogtool.com/*"
+      ],
       "js": ["content/loader.js"],
       "run_at": "document_idle"
     }
   ],
   "permissions": ["contextMenus", "scripting"],
-  "host_permissions": ["*://*.sharepoint.com/*", "*://onedrive.live.com/*"],
+  "host_permissions": [
+    "*://*.sharepoint.com/*",
+    "*://onedrive.live.com/*",
+    "*://*.backlog.com/*",
+    "*://*.backlog.jp/*",
+    "*://*.backlogtool.com/*"
+  ],
   "web_accessible_resources": [
     {
       "resources": ["content/*.js", "shared/*.js"],
-      "matches": ["*://*.sharepoint.com/*", "*://onedrive.live.com/*"]
+      "matches": [
+        "*://*.sharepoint.com/*",
+        "*://onedrive.live.com/*",
+        "*://*.backlog.com/*",
+        "*://*.backlog.jp/*",
+        "*://*.backlogtool.com/*"
+      ]
     }
   ]
 }

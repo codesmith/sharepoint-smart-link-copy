@@ -1,12 +1,12 @@
-import type { BreadcrumbResult } from '../shared/types';
+import type { ClipboardContent } from '../shared/types';
 import { BreadcrumbResolutionError } from '../shared/errors.js';
 
 export class ClipboardWriter {
-  async write(result: BreadcrumbResult): Promise<void> {
+  async write(content: ClipboardContent): Promise<void> {
     try {
       const item = new ClipboardItem({
-        'text/html': new Blob([result.html], { type: 'text/html' }),
-        'text/plain': new Blob([result.text], { type: 'text/plain' }),
+        'text/html': new Blob([content.html], { type: 'text/html' }),
+        'text/plain': new Blob([content.text], { type: 'text/plain' }),
       });
       await navigator.clipboard.write([item]);
     } catch (error) {

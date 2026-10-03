@@ -268,7 +268,7 @@ describe('Smart Link Copy(現在地のパンくずコピー)', () => {
 ```bash
 # 1. リポジトリのクローン
 git clone [このリポジトリ]
-cd smart-sharepoint-link
+cd smart-link-copy
 
 # 2. 依存関係のインストール
 npm install

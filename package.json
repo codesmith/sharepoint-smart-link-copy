@@ -1,7 +1,7 @@
 {
-  "name": "claude-code-book-chapter8",
+  "name": "smart-link-copy",
   "version": "0.1.0",
-  "description": "Claude Code book - Chapter 8 template",
+  "description": "SharePoint/OneDrive・Backlogのリンクを、場所や文脈が分かる形式でコピーするChrome拡張機能",
   "type": "module",
   "scripts": {
     "prepare": "husky",

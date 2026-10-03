@@ -3,7 +3,7 @@
 ## プロジェクト構造
 
 ```
-smart-sharepoint-link/
+smart-link-copy/
 ├── manifest.json           # Chrome拡張機能マニフェスト(Manifest V3)
 ├── public/                 # ビルドを経ずにそのまま拡張機能に含める静的ファイル
 │   └── icons/               # 拡張機能アイコン
@@ -50,10 +50,10 @@ background/
 
 #### content/
 
-**役割**: SharePoint/OneDriveページのURL解析、選択アイテム名・サイト名の読み取り、パンくずデータ構築、クリップボード書き込み(`docs/architecture.md`のContent Scriptレイヤーに対応)。
+**役割**: SharePoint/OneDriveページのURL解析、選択アイテム名・サイト名の読み取り、パンくずデータ構築、Backlog課題ページのURL解析・プロジェクト名/課題名の読み取り、クリップボード書き込み(`docs/architecture.md`のContent Scriptレイヤーに対応)。
 右クリック対象をDOMから検知する設計は廃止し(`docs/architecture.md`の「設計方針の変更」参照)、フォルダー階層は
 現在表示しているページのURLのみを情報源とする。DOMの読み取りは「選択アイテム名」「SharePointサイト名」に限定し、
-`SelectionReader`/`SelectionTracker`/`BreadcrumbRootLabelReader`に閉じ込める
+`SelectionReader`/`SelectionTracker`/`BreadcrumbRootLabelReader`に閉じ込める。Backlog用のモジュールは`Backlog`接頭辞で区別する
 
 **配置ファイル**:
 - `FolderPathResolver.ts`: URLからのフォルダー階層解析・リンク構築・起点ラベルの置き換え(関数ベース)
@@ -61,6 +61,9 @@ background/
 - `SelectionReader.ts`: DOMから選択アイテム名を読み取る(関数ベース。DOM構造依存はここに集約する)
 - `SelectionTracker.ts`: 右クリック直前の選択状態のスナップショット保持
 - `BreadcrumbRootLabelReader.ts`: OneDrive/SharePoint共通のパンくずUIから起点ラベルを読み取る(関数ベース)
+- `BacklogIssueResolver.ts`: URLがBacklogの課題ページかの判定と、課題URL・プロジェクトキーの取得(関数ベース)
+- `BacklogIssueReader.ts`: Backlogの課題ページDOMからプロジェクト名・課題名を読み取る(関数ベース)
+- `BacklogLinkBuilder.ts`: Backlogの課題情報のHTML/プレーンテキスト変換(関数ベース)
 - `ClipboardWriter.ts`: クリップボードへのHTML/プレーンテキスト書き込み
 - `index.ts`: Content Scriptの本体(各処理の組み立てとBackgroundからのメッセージ受信)
 - `loader.ts`: `manifest.json`の`content_scripts`から実際に読み込まれるローダー。動的`import()`で
@@ -68,7 +71,7 @@ background/
 
 **命名規則**:
 - クラスファイルはPascalCase、責務を表す名詞(接尾辞: `Resolver` / `Builder` / `Reader` / `Tracker` / `Writer`)
-- 状態を持たない純粋ロジック(`FolderPathResolver` / `BreadcrumbBuilder` / `SelectionReader` / `BreadcrumbRootLabelReader`)はクラスを使わず関数として実装する
+- 状態を持たない純粋ロジック(`FolderPathResolver` / `BreadcrumbBuilder` / `SelectionReader` / `BreadcrumbRootLabelReader` / `Backlog*`)はクラスを使わず関数として実装する
 
 **依存関係**:
 - 依存可能: `shared/`
@@ -82,6 +85,9 @@ content/
 ├── SelectionReader.ts
 ├── SelectionTracker.ts
 ├── BreadcrumbRootLabelReader.ts
+├── BacklogIssueResolver.ts
+├── BacklogIssueReader.ts
+├── BacklogLinkBuilder.ts
 ├── ClipboardWriter.ts
 ├── index.ts
 └── loader.ts
@@ -92,7 +98,7 @@ content/
 **役割**: `background/`と`content/`の両方、またはテストコードから参照する型定義・定数を配置する
 
 **配置ファイル**:
-- `types.ts`: `BreadcrumbSegment` / `PageContext` / `BreadcrumbResult`(`docs/functional-design.md`のデータモデル定義に対応)
+- `types.ts`: `BreadcrumbSegment` / `PageContext` / `ClipboardContent` / `BreadcrumbResult` / `BacklogIssueContext` / `BacklogIssueLink`(`docs/functional-design.md`のデータモデル定義に対応)
 - `errors.ts`: `BreadcrumbResolutionError`
 - `messages.ts`: Background⇔Content Script間のメッセージ型定義
 
@@ -117,7 +123,10 @@ tests/unit/
     ├── BreadcrumbBuilder.test.ts
     ├── SelectionReader.test.ts    # jsdom環境(ファイル先頭で `// @vitest-environment jsdom` を指定)
     ├── SelectionTracker.test.ts   # 同上
-    └── BreadcrumbRootLabelReader.test.ts  # 同上
+    ├── BreadcrumbRootLabelReader.test.ts  # 同上
+    ├── BacklogIssueResolver.test.ts
+    ├── BacklogIssueReader.test.ts  # jsdom環境
+    └── BacklogLinkBuilder.test.ts
 ```
 
 **命名規則**:
@@ -134,7 +143,8 @@ tests/unit/
 tests/integration/
 └── smart-link-copy/
     ├── current-location.test.ts        # 現在のフォルダー階層・選択アイテム一覧のエンドツーエンド検証
-    └── breadcrumb-root-label.test.ts    # パンくずUIからの起点ラベル取得のエンドツーエンド検証(jsdom環境)
+    ├── breadcrumb-root-label.test.ts    # パンくずUIからの起点ラベル取得のエンドツーエンド検証(jsdom環境)
+    └── backlog-issue.test.ts            # Backlog課題ページのDOM/URLからのエンドツーエンド検証(jsdom環境)
 ```
 
 ### docs/ (ドキュメントディレクトリ)
@@ -223,18 +233,22 @@ index.ts
   ├─→ SelectionTracker ─→ SelectionReader
   ├─→ BreadcrumbRootLabelReader
   ├─→ BreadcrumbBuilder
+  ├─→ BacklogIssueResolver
+  ├─→ BacklogIssueReader
+  ├─→ BacklogLinkBuilder ─→ BreadcrumbBuilder(escapeHtmlのみ)
   └─→ ClipboardWriter
 ```
 
 `FolderPathResolver` / `BreadcrumbBuilder` は純粋なデータ変換ロジックとして、DOMや`navigator.clipboard`(`ClipboardWriter`)に依存しない設計とし、ユニットテストを容易にする。
-DOM構造への依存は`SelectionReader`と`BreadcrumbRootLabelReader`にのみ集約し、他のモジュールへ波及させない。
+DOM構造への依存は`SelectionReader`・`BreadcrumbRootLabelReader`・`BacklogIssueReader`にのみ集約し、他のモジュールへ波及させない。
 
 ## スケーリング戦略
 
 ### 機能の追加
 
 1. **Post-MVP機能(ファイル単位でのリンクコピー、Outlook/Word対応等)**: まずは`content/`配下に新規モジュールを追加し、既存モジュールとの置き換え可能なインターフェース(`docs/architecture.md`の機能拡張性の方針)で実装する
-2. **対象サイトの追加**(将来的にBox/Google Drive等へ拡大する場合): `content/`配下にサイト別のサブディレクトリ(例: `content/sharepoint/`, `content/box/`)を切る形で分離する
+2. **対象サイトの追加**: Backlogは`Backlog*`接頭辞のファイルとして`content/`直下に追加した。さらにBox/Google Drive等へ拡大し
+   ファイル数が増えた場合は、`content/`配下にサイト別のサブディレクトリ(例: `content/sharepoint/`, `content/backlog/`)を切る形で分離する
 
 ### ファイルサイズの管理
 

@@ -10,7 +10,7 @@
 
 ### Smart Link Copy
 
-**定義**: SharePoint/OneDriveのページ上で右クリックした際に表示されるコンテキストメニュー項目、およびその機能名
+**定義**: SharePoint/OneDrive・Backlogの課題ページ上で右クリックした際に表示されるコンテキストメニュー項目、およびその機能名(リポジトリ名は`smart-link-copy`)
 
 **説明**: クリックすると、**現在アドレスバーに表示されているフォルダー**の階層をパンくず形式のリッチテキストリンクとしてクリップボードにコピーする。右クリックした場所・対象は問わない(実機検証の結果、ファイル/フォルダー行の右クリック対象を検知する設計は廃止した。詳細は[[設計方針の変更]]を参照)
 
@@ -18,6 +18,7 @@
 
 **使用例**:
 - 「■勉強会資料」フォルダーを開いた状態でページ内を右クリック→「Smart Link Copy」→Teamsに貼り付けると `マイファイル > ■勉強会資料` のように表示される
+- Backlogの課題ページで実行すると、`Spring開発標準 > 課題名` と課題URLの2行がコピーされる([[Backlog課題リンク]]参照)
 
 **英語表記**: Smart Link Copy
 
@@ -112,6 +113,42 @@ URLベースの値のままになる)
 「マイファイル」を読み取る。SharePointでは同様の構造からサイト名(例:「営業部サイト」)を読み取り、
 パンくずの起点(従来は「Shared Documents」等のライブラリ名)に置き換える
 
+### Backlog課題リンク
+
+**定義**: Backlogの課題詳細ページで「Smart Link Copy」を実行した際にコピーされる、「プロジェクト名 > 課題名」と課題URLの2行のテキスト
+
+**説明**: プロジェクト名はページ上部の`.header-icon-set__name`、課題名は件名欄(`[data-testid="issueSummary"]`)の`.markdown-body`、
+課題URLはアドレスバーのURL(`origin + pathname`。ハッシュ・クエリは除去)から取得する。プロジェクト名が取得できない場合は
+URLのプロジェクトキーで代替する。HTML形式では課題URLがハイパーリンクになる
+
+**関連用語**: [[Smart Link Copy]]、[[課題キー]]
+
+**使用例**:
+```
+Spring開発標準 > 【アプリケーション方式設計書_1はじめに.xlsx】1.1 本書の目的
+https://yonespring.backlog.com/view/SPRING-3
+```
+
+**英語表記**: Backlog Issue Link
+
+### 課題キー / プロジェクトキー
+
+**定義**: 課題キーはBacklogの課題を一意に識別する`<プロジェクトキー>-<番号>`形式の文字列(例: `SPRING-3`)。プロジェクトキーはその前半部分(例: `SPRING`)
+
+**説明**: 課題詳細ページのURLは`/view/<課題キー>`となる。`BacklogIssueResolver`がURLから両者を取り出す
+
+**関連用語**: [[Backlog課題リンク]]
+
+### BacklogIssueResolver / BacklogIssueReader / BacklogLinkBuilder
+
+**定義**: Backlog課題リンクコピーを構成するContent Scriptのモジュール群(いずれも関数ベース)
+
+**説明**: `BacklogIssueResolver`はURLが課題ページかを判定し`BacklogIssueContext`を返す(純粋関数)。
+`BacklogIssueReader`はDOMからプロジェクト名・課題名を読む(DOM依存はここに集約。見つからなければ`null`)。
+`BacklogLinkBuilder`は`ClipboardContent`(HTML/テキスト)に整形する(純粋関数)
+
+**関連用語**: [[Backlog課題リンク]]、[[ClipboardContent]]
+
 ## 技術用語
 
 ### Chrome Extension Manifest V3
@@ -203,7 +240,7 @@ SharePoint / OneDriveページ
 
 **定義**: Manifest V3で、拡張機能がアクセス可能なドメインを制限するための宣言
 
-**本プロジェクトでの適用**: `*://*.sharepoint.com/*` と `*://onedrive.live.com/*` のみを許可し、他ドメインへは一切アクセスしない設計とする
+**本プロジェクトでの適用**: `*://*.sharepoint.com/*`・`*://onedrive.live.com/*`・`*://*.backlog.com/*`・`*://*.backlog.jp/*`・`*://*.backlogtool.com/*` のみを許可し、他ドメインへは一切アクセスしない設計とする
 
 **関連コンポーネント**: `manifest.json`
 
@@ -213,7 +250,7 @@ SharePoint / OneDriveページ
 
 **説明**: `content_scripts[].js`に直接指定するファイル以外を動的`import()`等で読み込む場合、この宣言が無いと読み込みが例外を投げずにサイレントに失敗する。実際にこの登録漏れにより「コンテキストメニューは表示されるがクリックしても何も起きない」不具合が発生し、修正した(`docs/architecture.md`参照)
 
-**本プロジェクトでの適用**: `content/*.js`・`shared/*.js`を、対象サイト(`*://*.sharepoint.com/*`、`*://onedrive.live.com/*`)に限定して登録する
+**本プロジェクトでの適用**: `content/*.js`・`shared/*.js`を、対象サイト(SharePoint/OneDrive/Backlog)に限定して登録する
 
 **関連コンポーネント**: `manifest.json`、`src/content/loader.ts`
 
@@ -286,13 +323,28 @@ stateDiagram-v2
 
 **制約**: 1行目の`text`は各`segment.label`を` > `で連結したもの。`html`は`url`があれば`<a href>`、無ければエスケープ済みテキストとして連結したもの。`selectedItems`がある場合は2行目以降に[[行頭マーカー]]付きでアイテム名を追加する(textは`\n`区切り、htmlは`<br>`区切り、アイテム名はリンクなし)
 
+### ClipboardContent
+
+**定義**: クリップボードに書き込む内容の共通形(`html` / `text`)
+
+**説明**: `BreadcrumbResult`はこれを継承する。Backlog用の`BacklogLinkBuilder`はこの型を返し、`ClipboardWriter`はこの型を受け取る
+
+**関連エンティティ**: [[BreadcrumbResult]]
+
+### BacklogIssueContext / BacklogIssueLink
+
+**定義**: `BacklogIssueContext`はBacklogの課題ページURLから読み取れる情報(`issueKey` / `projectKey` / `issueUrl`)。
+`BacklogIssueLink`は整形の入力(`projectName` / `issueSummary` / `issueUrl`)
+
+**関連エンティティ**: [[ClipboardContent]]
+
 ## エラー・例外
 
 ### BreadcrumbResolutionError
 
 **クラス名**: `BreadcrumbResolutionError`
 
-**発生条件**: ページURLから`PageContext`を解析できない場合(`cause: 'url-parse-failed'`)、またはクリップボードへの書き込みに失敗した場合(`cause: 'clipboard-write-failed'`)
+**発生条件**: ページURLから`PageContext`を解析できない場合(`cause: 'url-parse-failed'`)、Backlogの課題名をDOMから取得できない場合(`cause: 'backlog-issue-not-found'`)、またはクリップボードへの書き込みに失敗した場合(`cause: 'clipboard-write-failed'`)
 
 **対処方法**: クリップボードは書き換えず、エラートースト「Smart Link Copyに失敗しました。もう一度お試しください」を表示する
 

@@ -1,5 +1,6 @@
 export type BreadcrumbResolutionErrorCause =
   | 'url-parse-failed'
+  | 'backlog-issue-not-found'
   | 'clipboard-write-failed';
 
 export class BreadcrumbResolutionError extends Error {

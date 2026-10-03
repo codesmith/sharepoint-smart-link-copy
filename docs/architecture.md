@@ -105,6 +105,20 @@ OneDrive/SharePoint共通のパンくずUIを読む方式に置き換えた)。
 `SelectionReader`と同様、DOM依存は`BreadcrumbRootLabelReader`に閉じ込め、`FolderPathResolver`自体は
 純粋関数のまま保つ。
 
+### Backlog課題リンクコピーの追加(対応サービスの拡大)
+
+Backlogの課題詳細ページでも「プロジェクト名 > 課題名」と課題URLをコピーできるようにした
+(これに伴いプロジェクト名を`smart-link-copy`に変更)。SharePoint/OneDriveと同じ構成方針を踏襲する。
+
+- `BacklogIssueResolver`(純粋関数): URLが課題ページ(`/view/<課題キー>`)かを判定し、課題URL・プロジェクトキーを得る
+- `BacklogIssueReader`(DOM依存): プロジェクト名(`.header-icon-set__name`)と課題名(件名欄の`.markdown-body`)を読む
+- `BacklogLinkBuilder`(純粋関数): クリップボード用のHTML/テキストに整形する
+- `content/index.ts`は`BacklogIssueResolver`の結果でBacklog/SharePoint・OneDriveの処理を振り分ける。
+  `ClipboardWriter`は両者共通の`ClipboardContent`(`html`/`text`)を受け取る
+- 課題名は代替手段がないため取得できなければエラー、プロジェクト名はURLのプロジェクトキーで代替する
+
+サービスが2つ程度のうちはサブディレクトリを切らず、ファイル名の接頭辞(`Backlog*`)で区別する。
+
 ## アーキテクチャパターン
 
 ### Chrome拡張機能のプロセス分離アーキテクチャ
@@ -116,12 +130,12 @@ Manifest V3の制約上、レイヤーは「責務」ではなく「実行コン
 │  Background Service Worker      │ ← 拡張機能のライフサイクル管理、
 │  (ContextMenuController)        │   コンテキストメニューの登録・クリック処理
 ├───────────────────────────────┤
-│  Content Script                 │ ← SharePoint/OneDriveページのDOM/URLへの
+│  Content Script                 │ ← SharePoint/OneDrive/BacklogページのDOM/URLへの
 │  (Tracker/Extractor/Resolver/   │   アクセス、パンくず構築、クリップボード書き込み
 │   Builder/Writer)                │
 ├───────────────────────────────┤
-│  対象Webページ                   │ ← SharePoint / OneDriveのDOM(読み取り専用でアクセス)
-│  (SharePoint/OneDrive)          │
+│  対象Webページ                   │ ← SharePoint / OneDrive / BacklogのDOM(読み取り専用でアクセス)
+│  (SharePoint/OneDrive/Backlog)  │
 └───────────────────────────────┘
 ```
 
@@ -133,10 +147,10 @@ Manifest V3の制約上、レイヤーは「責務」ではなく「実行コン
 
 #### Content Script
 - **責務**: 対象ページのDOM/URL解析、パンくずデータの構築、クリップボードへの書き込み
-- **許可される操作**: 実行対象ページ(SharePoint/OneDrive)のDOM読み取り、`navigator.clipboard`の呼び出し
+- **許可される操作**: 実行対象ページ(SharePoint/OneDrive/Backlog)のDOM読み取り、`navigator.clipboard`の呼び出し
 - **禁止される操作**: 拡張機能のライフサイクル管理(コンテキストメニュー登録はBackground側の責務)
 
-#### 対象Webページ(SharePoint/OneDrive)
+#### 対象Webページ(SharePoint/OneDrive/Backlog)
 - 本拡張機能が直接変更・制御する対象ではない。読み取り専用のデータソースとして扱う
 
 ## データ永続化戦略
@@ -172,8 +186,8 @@ Manifest V3の制約上、レイヤーは「責務」ではなく「実行コン
 ### データ保護
 
 - **暗号化**: 対象なし(機密データを保存・送信しないため)
-- **アクセス制御**: `host_permissions`を SharePoint(`*.sharepoint.com`)とOneDrive(`onedrive.live.com`)のみに限定し、他サイトのDOM・URLへは一切アクセスしない
-- **機密情報管理**: Microsoft 365の認証情報・アクセストークン・Cookie等を取得・保存・送信する処理は実装しない(そもそも扱わない設計とする)
+- **アクセス制御**: `host_permissions`を SharePoint(`*.sharepoint.com`)・OneDrive(`onedrive.live.com`)・Backlog(`*.backlog.com`/`*.backlog.jp`/`*.backlogtool.com`)のみに限定し、他サイトのDOM・URLへは一切アクセスしない
+- **機密情報管理**: BacklogのAPIキーも扱わない。Microsoft 365の認証情報・アクセストークン・Cookie等を取得・保存・送信する処理は実装しない(そもそも扱わない設計とする)
 
 ### 入力検証
 
@@ -186,8 +200,12 @@ Manifest V3の制約上、レイヤーは「責務」ではなく「実行コン
 | パーミッション | 用途 | 最小権限の考慮 |
 |---------------|------|----------------|
 | `contextMenus` | 「Smart Link Copy」メニューの登録・クリック検知 | 必須最小限 |
-| `scripting` | Content Scriptが存在しないタブへの読み込み(自己修復)と、失敗原因の取得 | `host_permissions`の範囲(SharePoint/OneDrive)にのみ作用する |
-| `host_permissions: ["*://*.sharepoint.com/*", "*://onedrive.live.com/*"]` | 対象ページでのContent Script実行・DOM/URLアクセス | SharePoint/OneDrive以外のドメインは含めない |
+| `scripting` | Content Scriptが存在しないタブへの読み込み(自己修復)と、失敗原因の取得 | `host_permissions`の範囲(SharePoint/OneDrive/Backlog)にのみ作用する |
+| `host_permissions: ["*://*.sharepoint.com/*", "*://onedrive.live.com/*", "*://*.backlog.com/*", "*://*.backlog.jp/*", "*://*.backlogtool.com/*"]` | 対象ページでのContent Script実行・DOM/URLアクセス | 対象サービス以外のドメインは含めない |
+
+Backlogは、Content Script・`host_permissions`はドメイン全体を対象にする一方、コンテキストメニューの
+`documentUrlPatterns`は課題詳細ページ(`/view/*`)に限定する。課題一覧等から画面遷移して課題ページを開いた場合でも、
+Content Scriptが既に読み込まれている(または自己修復で読み込める)ようにするためである。
 
 `activeTab`や全URL(`<all_urls>`)のような広範なパーミッションは要求しない。
 Content Scriptは通常`content_scripts`(`manifest.json`)でSharePoint/OneDriveに事前登録されており、
@@ -219,7 +237,7 @@ Content Scriptが存在しない場合は`sendMessage`が「Receiving end does n
 ### ユニットテスト
 - **フレームワーク**: Vitest
 - **対象**: `FolderPathResolver`(URL解析・階層構築・起点ラベル置き換えロジック)、`BreadcrumbBuilder`(パンくず・選択アイテム一覧の合成ロジック)、
-  HTMLエスケープ処理、`SelectionReader`/`SelectionTracker`/`BreadcrumbRootLabelReader`(jsdom環境)
+  `BacklogIssueResolver`/`BacklogLinkBuilder`、HTMLエスケープ処理、`SelectionReader`/`SelectionTracker`/`BreadcrumbRootLabelReader`/`BacklogIssueReader`(jsdom環境)
 - **カバレッジ目標**: 上記のロジック部分について80%以上
 
 ### 統合テスト
@@ -246,6 +264,9 @@ Content Scriptが存在しない場合は`sendMessage`が「Receiving end does n
   (`data-automationid="breadcrumb-crumb"`)に依存する。実機のDOMキャプチャに基づいて実装しているが、
   Microsoft側のUI変更で取得できなくなる可能性はある。取得できない場合はURLベースの値にフォールバックするため
   機能自体は継続する
+- Backlogの課題名・プロジェクト名の読み取り(`BacklogIssueReader`)はBacklogのDOM構造(`data-testid="issueSummary"`・
+  `.header-icon-set__name`等)に依存する。BacklogのUI変更で課題名が取得できなくなった場合はエラーになるため、
+  セレクターの調整が必要になる
 
 ### セキュリティ制約
 - `host_permissions`をSharePoint/OneDriveドメインに限定しているため、それ以外のドメインでの動作(将来的な他ドキュメント共有サービスへの対応等)には、都度パーミッションの追加とストア審査(社内配布の場合は社内承認)が必要になる
