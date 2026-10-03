@@ -111,8 +111,8 @@ cd dist && zip -r ../smart-link-copy-<version>.zip . && cd ..
 - ~~ストア用の透過アイコンが必要~~ → **作成済み**: `store/store-icon-128.png`(128×128px、絵柄96px+透明余白16px)。
   `public/icons/`のアイコンも同じデザインに差し替えた(原本は`store/*.svg`)
 - ~~440×280pxのタイルが必要~~ → **作成済み**: `store/promo-tile-440x280.png`
-- スクリーンショット: OneDrive版を1枚作成済み(`store/screenshot-1-1280x800.png`。原本は`screenshot-1.svg`と`screenshot-1-source.png`)。
-  Backlog版は任意(最低1枚で要件を満たす)
+- スクリーンショット: 2枚作成済み(`store/screenshot-1-1280x800.png`: OneDrive、`store/screenshot-2-1280x800.png`: Backlog)。
+  実機の画面とTeamsへの実際の貼り付け結果を合成したもの
   - **スクリーンショットに社内のフォルダー名・氏名・課題名などを写さないこと**(公開されるため)
 - 掲載情報は正確・最新・網羅的である必要があり、誤解を招く内容や不完全な内容は違反になる
   - 根拠: [Program Policies(Listing Requirements)](https://developer.chrome.com/docs/webstore/program-policies/policies)
@@ -222,7 +222,7 @@ cd dist && zip -r ../smart-link-copy-<version>.zip . && cd ..
 - [ ] `npm test` / `npm run lint` / `npm run build` が通る
 - [ ] `dist/` の**中身**をZIPにした(`manifest.json` がZIPのルートにある)
 - [x] ストア用アイコン(128×128px、透過余白つき)とプロモーション用タイル(440×280px)を用意した(`store/`)
-- [x] スクリーンショット(1280×800px)を用意した(`store/screenshot-1-1280x800.png`)
+- [x] スクリーンショット(1280×800px)を用意した(`store/screenshot-1-1280x800.png`、`store/screenshot-2-1280x800.png`)
 - [ ] スクリーンショット・説明文に機密情報や個人情報が写っていない
 - [ ] 単一用途・権限の正当性・リモートコード「なし」・データ使用の申告を入力した
 - [ ] プライバシーポリシーのURLを用意した

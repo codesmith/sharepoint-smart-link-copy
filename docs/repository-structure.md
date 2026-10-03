@@ -175,7 +175,7 @@ tests/integration/
 - `promo-tile.svg`: プロモーション用タイル(小)のSVG原本
 - `store-icon-128.png`: ストアアイコン(128×128px、透過余白付き)
 - `promo-tile-440x280.png`: プロモーション用タイル(小)
-- `screenshot-1-1280x800.png`: ストア用スクリーンショット(原本は`screenshot-1.svg`。元の画面写真は`screenshot-1-source.png`)
+- `screenshot-1-1280x800.png` / `screenshot-2-1280x800.png`: ストア用スクリーンショット(OneDrive / Backlog。実機の画面とTeamsへの貼り付け結果を合成)
 
 **依存関係**: ビルド対象外(`dist/`にはコピーしない)。PNGの書き出しはプロジェクトの依存パッケージを増やさないため、
 SVGを変更したときに外部ツール(resvg等)で手動で行う
