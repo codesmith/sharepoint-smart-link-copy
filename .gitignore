@@ -44,3 +44,5 @@ coverage/
 # yarn.lock
 
 .claude/settings.local.json
+
+smart-link-copy-*.zip

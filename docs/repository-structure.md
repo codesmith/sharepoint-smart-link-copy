@@ -5,6 +5,7 @@
 ```
 smart-link-copy/
 ├── manifest.json           # Chrome拡張機能マニフェスト(Manifest V3)
+├── PRIVACY.md              # プライバシーポリシー(Chrome Web Storeの掲載情報からリンクする)
 ├── public/                 # ビルドを経ずにそのまま拡張機能に含める静的ファイル
 │   └── icons/               # 拡張機能アイコン
 ├── store/                  # Chrome Web Store掲載用の素材(アイコン・タイルのSVG原本と書き出したPNG。拡張機能には含めない)
