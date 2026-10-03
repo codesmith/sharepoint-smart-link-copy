@@ -175,9 +175,32 @@ DOM/Chrome APIに依存しない純粋なURL文字列処理のみのため、ク
 ```typescript
 function resolvePageContext(url: string): PageContext | null;
 function buildAncestorFolders(context: PageContext): BreadcrumbSegment[]; // 起点〜現在のフォルダーまでの全階層
+function replaceRootLabel(segments: BreadcrumbSegment[], label: string): BreadcrumbSegment[]; // 起点セグメントのラベルのみ置き換える(urlはnullのまま)
 ```
 
 **依存関係**: なし(URL文字列処理のみ)
+
+### BreadcrumbRootLabelReader(Content Script)
+
+**責務**:
+- OneDrive/SharePointページ自身が表示しているパンくずUI(Fluent UI製。`[data-automationid="breadcrumb-crumb"]`で
+  各階層の要素を特定できる、実機のDOMキャプチャで確認済みの安定した自動化属性)から、先頭(文書順で最初)の
+  要素のラベルを読み取る。OneDriveでは「マイファイル」、SharePointではサイト名がここに表示される
+- URLの`id`パラメータにはSharePointのサイト名そのものが含まれないため(ドキュメントライブラリ名までしか
+  分からない)、DOMから読み取る必要がある
+- 先頭の`[data-automationid="breadcrumb-crumb"]`要素の内側にある`[title]`要素のtitle属性を優先し、
+  無ければテキストをそのまま使う
+- 取得したテキストは空白を正規化(trim)する。DOM構造が想定外でも例外を投げず、`null`を返す
+
+**インターフェース**:
+```typescript
+function readBreadcrumbRootLabel(root: ParentNode): string | null;
+```
+
+**依存関係**: OneDrive/SharePointのパンくずUIのDOM構造(`data-automationid`属性)。実機のDOMキャプチャに基づいて
+実装しているが、Microsoft側のUI変更の影響は受けうる。取得に失敗した場合は、起点はURLベースの値
+(マイファイル、またはドキュメントライブラリ名)のままになる(`FolderPathResolver.buildAncestorFolders`の
+デフォルト動作へフォールバックする)
 
 ### SelectionReader(Content Script)
 
@@ -259,6 +282,7 @@ sequenceDiagram
     participant ContentScript as Content Script(index.ts)
     participant Tracker as SelectionTracker
     participant Resolver as FolderPathResolver
+    participant RootLabelReader as BreadcrumbRootLabelReader
     participant Builder as BreadcrumbBuilder
     participant Writer as ClipboardWriter
 
@@ -271,6 +295,12 @@ sequenceDiagram
     Resolver-->>ContentScript: PageContext
     ContentScript->>Resolver: buildAncestorFolders(context)
     Resolver-->>ContentScript: 起点〜現在のフォルダーまでのBreadcrumbSegment[]
+    ContentScript->>RootLabelReader: readBreadcrumbRootLabel(document)
+    RootLabelReader-->>ContentScript: 起点ラベル(マイファイル/サイト名) または null
+    opt 起点ラベルを取得できた場合
+        ContentScript->>Resolver: replaceRootLabel(segments, 起点ラベル)
+        Resolver-->>ContentScript: 起点を置き換えたBreadcrumbSegment[]
+    end
     ContentScript->>Tracker: getSnapshot()
     Tracker-->>ContentScript: 選択アイテム名[]
     ContentScript->>Builder: buildBreadcrumbResult(segments, selectedItems)
@@ -285,10 +315,13 @@ sequenceDiagram
 2. 右クリックの`mousedown`/`contextmenu`(captureフェーズ)で、`SelectionTracker`が選択アイテム名をスナップショットする
 3. ユーザーが「Smart Link Copy」をクリックすると、Background経由でContent Script側の処理が起動する
 4. `FolderPathResolver` が現在のURLから `PageContext` を解析し、起点〜現在のフォルダーまでの階層を構築する
-5. スナップショット(未取得なら現在の選択)から選択アイテム名を取得する
-6. `BreadcrumbBuilder` が階層情報と選択アイテム名を `BreadcrumbResult`(HTML/プレーンテキスト)に変換する
-7. `ClipboardWriter` がクリップボードへ書き込む
-8. ユーザーはTeams/OneNoteに貼り付けて共有する
+5. `BreadcrumbRootLabelReader` がページ自身のパンくずUIから起点ラベル(OneDriveなら「マイファイル」、
+   SharePointならサイト名)を読み取り、取得できれば `FolderPathResolver.replaceRootLabel` で起点セグメントを
+   置き換える(取得できなければURLベースの値のまま)
+6. スナップショット(未取得なら現在の選択)から選択アイテム名を取得する
+7. `BreadcrumbBuilder` が階層情報と選択アイテム名を `BreadcrumbResult`(HTML/プレーンテキスト)に変換する
+8. `ClipboardWriter` がクリップボードへ書き込む
+9. ユーザーはTeams/OneNoteに貼り付けて共有する
 
 ## コピー処理の状態遷移
 
@@ -344,6 +377,15 @@ stateDiagram-v2
   部分パスを作り、現在の `origin + pathname` に対して `id` クエリパラメータを当該部分パスに差し替えたURLを生成する
 - `viewid` 等、`id` 以外の既存クエリパラメータは元のURLの値をそのまま引き継ぐ
 - 生成したURLを、そのセグメントの `BreadcrumbSegment.url` とする
+
+#### ステップ5: 起点ラベルのパンくずUIラベルへの置き換え
+- ステップ3で決定した起点ラベル(SharePointの場合はドキュメントライブラリ名)は、同じ名前
+  (「Shared Documents」等)が複数のSharePointサイトで重複しやすく、どのサイトか分かりにくい
+- `BreadcrumbRootLabelReader.readBreadcrumbRootLabel(document)` で、ページ自身のパンくずUIの先頭要素
+  (OneDriveなら「マイファイル」、SharePointならサイト名)を読み取り、取得できれば
+  `replaceRootLabel(segments, 取得したラベル)` で起点ラベルを置き換える(`url`は`null`のまま変更しない)
+- 取得できない場合(DOM構造が想定外等)は、ステップ3のURLベースの起点ラベルのままにする
+  (パンくずのコピー自体は失敗させない)
 
 **実装例**:
 ```typescript
@@ -448,6 +490,7 @@ function buildAncestorFolders(context: PageContext): BreadcrumbSegment[] {
 | SharePoint/OneDrive以外のページ | そもそもコンテキストメニュー項目を表示しない(`documentUrlPatterns`で制御) | 表示なし |
 | ファイル/フォルダー行の右クリック | SharePoint/OneDrive自身の独自メニューにブラウザメニューごと抑制され、拡張機能側では検知できない(既知の制約) | 表示なし |
 | 選択アイテム名を取得できない(DOM構造が想定外/選択なし) | 例外にせず「選択なし」として扱い、パンくずのみをコピーする | 表示なし(コンソールに`console.debug`で取得結果を出力し、切り分けに使う) |
+| パンくずUIから起点ラベルを取得できない(DOM構造が想定外) | 例外にせず、起点をURLベースの値のままにする | 表示なし(コンソールに取得結果を出力し、切り分けに使う) |
 
 ## テスト戦略
 
@@ -458,10 +501,13 @@ function buildAncestorFolders(context: PageContext): BreadcrumbSegment[] {
 
 - `FolderPathResolver.resolvePageContext`: OneDrive/SharePoint双方のURLパターン、`id`パラメータ欠如時の異常系
 - `FolderPathResolver.buildAncestorFolders`: 階層の深さ違い(1階層〜複数階層)、日本語・記号を含むフォルダー名
+- `FolderPathResolver.replaceRootLabel`: 起点ラベルの置き換え、空配列、`url`が`null`のまま保たれること
 - `BreadcrumbBuilder.buildBreadcrumbResult`: セグメントのHTML/プレーンテキスト変換、空配列時の挙動、
   選択アイテム0件/1件/複数件の出力、行頭マーカー`　┗ `、アイテム名のHTMLエスケープ
 - `SelectionReader.readSelectedItemNames`: 選択行のみ抽出、ヘッダー行の除外、名前取得の各フォールバック、
   拡張子が別要素の場合、重複除去、選択なし・想定外構造で空配列
+- `BreadcrumbRootLabelReader.readBreadcrumbRootLabel`: 実際のパンくずDOM構造からの取得、title属性/テキストの
+  フォールバック、見つからない場合に`null`、空白の正規化
 - `SelectionTracker`: 右クリックの`mousedown`後に選択が解除されても、`mousedown`時点の選択が保持されること
 - HTML生成処理: XSSを狙った特殊文字を含むフォルダー名・アイテム名のエスケープ
 
@@ -478,4 +524,7 @@ function buildAncestorFolders(context: PageContext): BreadcrumbSegment[] {
   右クリックで選択が解除されるUIでも右クリック前の選択が反映されることを確認する
   (選択アイテムが取得できない場合は、ページのコンソールで`[Smart Link Copy] 選択アイテム`のログを確認し、
   実際のDOM構造に合わせて`SelectionReader`のセレクターを調整する)
+- SharePointチームサイトで実行し、起点がドキュメントライブラリ名ではなくサイト名になることを確認する
+  (取得できない場合は、ページのコンソールで`[Smart Link Copy] 起点ラベル`のログを確認し、実際のDOM構造に
+  合わせて`BreadcrumbRootLabelReader`のセレクターを調整する)
 - (自動E2Eは対象がMicrosoft 365実環境に依存するため、MVPでは手動確認とする)

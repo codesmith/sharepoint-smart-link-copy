@@ -115,3 +115,17 @@ export function buildAncestorFolders(
 
   return result;
 }
+
+// SharePointでは起点ラベル(ドキュメントライブラリ名)が複数サイトで重複しやすく、どのサイトの資料か
+// 分かりにくいため、呼び出し側(index.ts)がDOMから読み取ったサイト名で起点ラベルのみを置き換える。
+// urlは常にnull(起点はリンクを持たない)のため変更しない。
+export function replaceRootLabel(
+  segments: BreadcrumbSegment[],
+  label: string
+): BreadcrumbSegment[] {
+  if (segments.length === 0) {
+    return segments;
+  }
+
+  return [{ label, url: null }, ...segments.slice(1)];
+}

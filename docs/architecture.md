@@ -83,6 +83,28 @@ SharePoint/OneDriveがファイル/フォルダー行の右クリックに独自
 
 このDOM依存は`SelectionReader`(と`SelectionTracker`)に閉じ込め、URL解析・整形ロジックには波及させない。
 
+### パンくずUIからの起点ラベル取得(限定的なDOM読み取りの追加)
+
+SharePointチームサイトでは、URLから特定できる起点(ドキュメントライブラリ名。例:「Shared Documents」)が
+複数サイトで重複しやすく、どのサイトの資料か分からない、という問題があった。サイト名自体はURLの`id`
+パラメータに含まれないため、DOMで読み取る必要がある。
+
+実機のDOMキャプチャで確認したところ、OneDrive/SharePointは共通のFluent UI製パンくずコンポーネントを使っており、
+各階層が`[data-automationid="breadcrumb-crumb"]`という安定した自動化属性を持つ(ハッシュ付きのCSSクラス名
+(`breadcrumbTextItem_e8d4563a`等)とは異なり、ビルドが変わっても変化しにくい)。その先頭要素のテキストは、
+OneDriveでは「マイファイル」、SharePointではサイト名を表している。`BreadcrumbRootLabelReader`はこの要素を
+読み取る(当初はSharePoint限定でページヘッダーの見出し要素を推測ベースで読んでいたが、実機確認の結果、
+OneDrive/SharePoint共通のパンくずUIを読む方式に置き換えた)。
+
+- 読み取り対象は先頭の`[data-automationid="breadcrumb-crumb"]`要素に限定する
+- 取得できた場合、`FolderPathResolver.replaceRootLabel`で起点ラベルを置き換える(純粋関数。`url`は`null`のまま)。
+  取得できない場合は、従来通りURLベースの値(マイファイル、またはドキュメントライブラリ名)のままにする
+  (例外にしない)
+- OneDrive/SharePointどちらの`siteType`でも同じロジックを適用する(サイト種別で分岐しない)
+
+`SelectionReader`と同様、DOM依存は`BreadcrumbRootLabelReader`に閉じ込め、`FolderPathResolver`自体は
+純粋関数のまま保つ。
+
 ## アーキテクチャパターン
 
 ### Chrome拡張機能のプロセス分離アーキテクチャ
@@ -196,8 +218,8 @@ Content Scriptが存在しない場合は`sendMessage`が「Receiving end does n
 
 ### ユニットテスト
 - **フレームワーク**: Vitest
-- **対象**: `FolderPathResolver`(URL解析・階層構築ロジック)、`BreadcrumbBuilder`(パンくず・選択アイテム一覧の合成ロジック)、
-  HTMLエスケープ処理、`SelectionReader`/`SelectionTracker`(jsdom環境)
+- **対象**: `FolderPathResolver`(URL解析・階層構築・起点ラベル置き換えロジック)、`BreadcrumbBuilder`(パンくず・選択アイテム一覧の合成ロジック)、
+  HTMLエスケープ処理、`SelectionReader`/`SelectionTracker`/`BreadcrumbRootLabelReader`(jsdom環境)
 - **カバレッジ目標**: 上記のロジック部分について80%以上
 
 ### 統合テスト
@@ -220,6 +242,10 @@ Content Scriptが存在しない場合は`sendMessage`が「Receiving end does n
   変化する可能性があり、`FolderPathResolver`のURL解析ロジックはその都度メンテナンスが必要になる制約がある
 - 選択アイテム名の読み取り(`SelectionReader`)はSharePoint/OneDriveのDOM構造(`aria-selected`・`role`属性等)に依存する。
   UI変更で取得できなくなった場合も、パンくずのコピー自体は継続できる設計だが、セレクターの調整が必要になる
+- 起点ラベルの読み取り(`BreadcrumbRootLabelReader`)はOneDrive/SharePointのパンくずUIのDOM構造
+  (`data-automationid="breadcrumb-crumb"`)に依存する。実機のDOMキャプチャに基づいて実装しているが、
+  Microsoft側のUI変更で取得できなくなる可能性はある。取得できない場合はURLベースの値にフォールバックするため
+  機能自体は継続する
 
 ### セキュリティ制約
 - `host_permissions`をSharePoint/OneDriveドメインに限定しているため、それ以外のドメインでの動作(将来的な他ドキュメント共有サービスへの対応等)には、都度パーミッションの追加とストア審査(社内配布の場合は社内承認)が必要になる

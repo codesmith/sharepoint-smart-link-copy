@@ -50,16 +50,17 @@ background/
 
 #### content/
 
-**役割**: SharePoint/OneDriveページのURL解析、選択アイテム名の読み取り、パンくずデータ構築、クリップボード書き込み(`docs/architecture.md`のContent Scriptレイヤーに対応)。
+**役割**: SharePoint/OneDriveページのURL解析、選択アイテム名・サイト名の読み取り、パンくずデータ構築、クリップボード書き込み(`docs/architecture.md`のContent Scriptレイヤーに対応)。
 右クリック対象をDOMから検知する設計は廃止し(`docs/architecture.md`の「設計方針の変更」参照)、フォルダー階層は
-現在表示しているページのURLのみを情報源とする。DOMの読み取りは「選択アイテム名」に限定し、
-`SelectionReader`/`SelectionTracker`に閉じ込める
+現在表示しているページのURLのみを情報源とする。DOMの読み取りは「選択アイテム名」「SharePointサイト名」に限定し、
+`SelectionReader`/`SelectionTracker`/`BreadcrumbRootLabelReader`に閉じ込める
 
 **配置ファイル**:
-- `FolderPathResolver.ts`: URLからのフォルダー階層解析・リンク構築(関数ベース)
+- `FolderPathResolver.ts`: URLからのフォルダー階層解析・リンク構築・起点ラベルの置き換え(関数ベース)
 - `BreadcrumbBuilder.ts`: フォルダー階層と選択アイテム名のHTML/プレーンテキスト変換(関数ベース)
 - `SelectionReader.ts`: DOMから選択アイテム名を読み取る(関数ベース。DOM構造依存はここに集約する)
 - `SelectionTracker.ts`: 右クリック直前の選択状態のスナップショット保持
+- `BreadcrumbRootLabelReader.ts`: OneDrive/SharePoint共通のパンくずUIから起点ラベルを読み取る(関数ベース)
 - `ClipboardWriter.ts`: クリップボードへのHTML/プレーンテキスト書き込み
 - `index.ts`: Content Scriptの本体(各処理の組み立てとBackgroundからのメッセージ受信)
 - `loader.ts`: `manifest.json`の`content_scripts`から実際に読み込まれるローダー。動的`import()`で
@@ -67,7 +68,7 @@ background/
 
 **命名規則**:
 - クラスファイルはPascalCase、責務を表す名詞(接尾辞: `Resolver` / `Builder` / `Reader` / `Tracker` / `Writer`)
-- 状態を持たない純粋ロジック(`FolderPathResolver` / `BreadcrumbBuilder` / `SelectionReader`)はクラスを使わず関数として実装する
+- 状態を持たない純粋ロジック(`FolderPathResolver` / `BreadcrumbBuilder` / `SelectionReader` / `BreadcrumbRootLabelReader`)はクラスを使わず関数として実装する
 
 **依存関係**:
 - 依存可能: `shared/`
@@ -80,6 +81,7 @@ content/
 ├── BreadcrumbBuilder.ts
 ├── SelectionReader.ts
 ├── SelectionTracker.ts
+├── BreadcrumbRootLabelReader.ts
 ├── ClipboardWriter.ts
 ├── index.ts
 └── loader.ts
@@ -114,7 +116,8 @@ tests/unit/
     ├── FolderPathResolver.test.ts
     ├── BreadcrumbBuilder.test.ts
     ├── SelectionReader.test.ts    # jsdom環境(ファイル先頭で `// @vitest-environment jsdom` を指定)
-    └── SelectionTracker.test.ts   # 同上
+    ├── SelectionTracker.test.ts   # 同上
+    └── BreadcrumbRootLabelReader.test.ts  # 同上
 ```
 
 **命名規則**:
@@ -130,7 +133,8 @@ tests/unit/
 ```
 tests/integration/
 └── smart-link-copy/
-    └── current-location.test.ts   # 現在のフォルダー階層・選択アイテム一覧のエンドツーエンド検証
+    ├── current-location.test.ts        # 現在のフォルダー階層・選択アイテム一覧のエンドツーエンド検証
+    └── breadcrumb-root-label.test.ts    # パンくずUIからの起点ラベル取得のエンドツーエンド検証(jsdom環境)
 ```
 
 ### docs/ (ドキュメントディレクトリ)
@@ -217,12 +221,13 @@ content/    ─┘
 index.ts
   ├─→ FolderPathResolver
   ├─→ SelectionTracker ─→ SelectionReader
+  ├─→ BreadcrumbRootLabelReader
   ├─→ BreadcrumbBuilder
   └─→ ClipboardWriter
 ```
 
 `FolderPathResolver` / `BreadcrumbBuilder` は純粋なデータ変換ロジックとして、DOMや`navigator.clipboard`(`ClipboardWriter`)に依存しない設計とし、ユニットテストを容易にする。
-DOM構造への依存は`SelectionReader`にのみ集約し、他のモジュールへ波及させない。
+DOM構造への依存は`SelectionReader`と`BreadcrumbRootLabelReader`にのみ集約し、他のモジュールへ波及させない。
 
 ## スケーリング戦略
 

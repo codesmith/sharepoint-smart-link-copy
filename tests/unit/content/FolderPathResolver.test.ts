@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolvePageContext,
   buildAncestorFolders,
+  replaceRootLabel,
 } from '../../../src/content/FolderPathResolver';
 
 const ONEDRIVE_URL =
@@ -149,6 +150,42 @@ describe('FolderPathResolver', () => {
         'Shared Documents',
         'ProjectX',
       ]);
+    });
+  });
+
+  describe('replaceRootLabel', () => {
+    it('先頭セグメントのラベルのみを置き換え、urlはnullのままにする', () => {
+      // Given: 準備
+      const context = resolvePageContext(SHAREPOINT_URL)!;
+      const segments = buildAncestorFolders(context);
+
+      // When: 実行
+      const result = replaceRootLabel(segments, '営業部サイト');
+
+      // Then: 検証
+      expect(result[0]).toEqual({ label: '営業部サイト', url: null });
+      expect(result.slice(1)).toEqual(segments.slice(1));
+    });
+
+    it('元の配列を変更しない', () => {
+      // Given: 準備
+      const context = resolvePageContext(SHAREPOINT_URL)!;
+      const segments = buildAncestorFolders(context);
+      const originalLabel = segments[0].label;
+
+      // When: 実行
+      replaceRootLabel(segments, '営業部サイト');
+
+      // Then: 検証
+      expect(segments[0].label).toBe(originalLabel);
+    });
+
+    it('空配列を渡した場合はそのまま返す', () => {
+      // Given/When: 準備と実行
+      const result = replaceRootLabel([], '営業部サイト');
+
+      // Then: 検証
+      expect(result).toEqual([]);
     });
   });
 });

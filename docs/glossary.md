@@ -4,7 +4,7 @@
 
 このドキュメントは、プロジェクト内で使用される用語の定義を管理します。
 
-**更新日**: 2026-09-27
+**更新日**: 2026-10-03
 
 ## ドメイン用語
 
@@ -48,13 +48,17 @@
 
 **定義**: パンくずの先頭に表示される、階層のルートを表すラベル
 
-**説明**: OneDrive(個人領域)の場合は固定文字列「マイファイル」、SharePointチームサイトの場合はドキュメントライブラリ名(例: `Documents`)となる。起点セグメントはリンクを持たないプレーンテキストとして表示される
+**説明**: ページ自身のパンくずUI([[BreadcrumbRootLabelReader]]参照)の先頭要素から取得する。
+OneDriveでは「マイファイル」、SharePointチームサイトではサイト名が表示される。取得できない場合は
+URLベースの値(OneDriveは「マイファイル」固定、SharePointはドキュメントライブラリ名。例: `Documents`)に
+フォールバックする。起点セグメントはリンクを持たないプレーンテキストとして表示される
 
-**関連用語**: [[パンくず]]、[[PageContext]]
+**関連用語**: [[パンくず]]、[[PageContext]]、[[BreadcrumbRootLabelReader]]
 
 **使用例**:
 - OneDrive: `マイファイル`
-- SharePointチームサイト: `Documents`
+- SharePointチームサイト(サイト名取得成功時): `営業部サイト`
+- SharePointチームサイト(フォールバック時): `Documents`
 
 **英語表記**: Root Segment / Top Folder
 
@@ -91,6 +95,22 @@
 **説明**: DOM構造への依存をここに閉じ込めている。名前の取得は多段のフォールバックで、失敗しても例外にせず空(選択なし)として扱う
 
 **関連用語**: [[選択アイテム]]
+
+### BreadcrumbRootLabelReader
+
+**定義**: OneDrive/SharePointページ自身が表示しているパンくずUIから、起点ラベルを読み取る関数(`readBreadcrumbRootLabel`)
+
+**説明**: OneDrive/SharePointは共通のFluent UI製パンくずコンポーネントを使っており、各階層が
+`data-automationid="breadcrumb-crumb"`という安定した自動化属性を持つ(実機のDOMキャプチャで確認済み。
+ハッシュ付きのCSSクラス名とは異なり変化しにくい)。その先頭要素のテキスト(OneDriveでは「マイファイル」、
+SharePointではサイト名)を読み取る。見つからなければ`null`を返す(例外にせず、起点は[[起点セグメント]]の
+URLベースの値のままになる)
+
+**関連用語**: [[起点セグメント]]
+
+**使用例**: 実際のOneDriveのパンくずDOM(`<span title="マイファイル" class="breadcrumbTextItem_...">`)から
+「マイファイル」を読み取る。SharePointでは同様の構造からサイト名(例:「営業部サイト」)を読み取り、
+パンくずの起点(従来は「Shared Documents」等のライブラリ名)に置き換える
 
 ## 技術用語
 
