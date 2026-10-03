@@ -60,7 +60,7 @@ background/
 - `BreadcrumbBuilder.ts`: フォルダー階層と選択アイテム名のHTML/プレーンテキスト変換(関数ベース)
 - `SelectionReader.ts`: DOMから選択アイテム名を読み取る(関数ベース。DOM構造依存はここに集約する)
 - `SelectionTracker.ts`: 右クリック直前の選択状態のスナップショット保持
-- `BreadcrumbRootLabelReader.ts`: OneDrive/SharePoint共通のパンくずUIから起点ラベルを読み取る(関数ベース)
+- `BreadcrumbRootLabelReader.ts`: OneDrive/SharePoint共通のパンくずUIから起点ラベルを読み取る(関数ベース。折りたたみ対策の末尾照合を含む)
 - `BacklogIssueResolver.ts`: URLがBacklogの課題ページかの判定と、課題URL・プロジェクトキーの取得(関数ベース)
 - `BacklogIssueReader.ts`: Backlogの課題ページDOMからプロジェクト名・課題名を読み取る(関数ベース)
 - `BacklogLinkBuilder.ts`: Backlogの課題情報のHTML/プレーンテキスト変換(関数ベース)

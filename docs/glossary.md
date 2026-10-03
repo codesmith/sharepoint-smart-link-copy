@@ -49,7 +49,7 @@
 
 **定義**: パンくずの先頭に表示される、階層のルートを表すラベル
 
-**説明**: ページ自身のパンくずUI([[BreadcrumbRootLabelReader]]参照)の先頭要素から取得する。
+**説明**: ページ自身のパンくずUI([[BreadcrumbRootLabelReader]]参照)の起点側の要素から取得する。階層が深く起点側が折りたたまれている場合は、URLベースの値を使う。
 OneDriveでは「マイファイル」、SharePointチームサイトではサイト名が表示される。取得できない場合は
 URLベースの値(OneDriveは「マイファイル」固定、SharePointはドキュメントライブラリ名。例: `Documents`)に
 フォールバックする。起点セグメントはリンクを持たないプレーンテキストとして表示される
@@ -99,12 +99,12 @@ URLベースの値(OneDriveは「マイファイル」固定、SharePointはド�
 
 ### BreadcrumbRootLabelReader
 
-**定義**: OneDrive/SharePointページ自身が表示しているパンくずUIから、起点ラベルを読み取る関数(`readBreadcrumbRootLabel`)
+**定義**: OneDrive/SharePointページ自身が表示しているパンくずUIから、起点ラベルを読み取る関数群(`readBreadcrumbLabels` / `selectRootLabel` / `readBreadcrumbRootLabel`)
 
 **説明**: OneDrive/SharePointは共通のFluent UI製パンくずコンポーネントを使っており、各階層が
 `data-automationid="breadcrumb-crumb"`という安定した自動化属性を持つ(実機のDOMキャプチャで確認済み。
 ハッシュ付きのCSSクラス名とは異なり変化しにくい)。その先頭要素のテキスト(OneDriveでは「マイファイル」、
-SharePointではサイト名)を読み取る。見つからなければ`null`を返す(例外にせず、起点は[[起点セグメント]]の
+SharePointではサイト名)を読み取る。階層が深いと起点側は📁アイコン([[パンくずの折りたたみ]])に隠れるため、全ラベルをURL由来のフォルダー列と末尾から照合し、照合できなかった先頭側の余りを起点とする。見つからなければ`null`を返す(例外にせず、起点は[[起点セグメント]]の
 URLベースの値のままになる)
 
 **関連用語**: [[起点セグメント]]
@@ -148,6 +148,15 @@ https://yonespring.backlog.com/view/SPRING-3
 `BacklogLinkBuilder`は`ClipboardContent`(HTML/テキスト)に整形する(純粋関数)
 
 **関連用語**: [[Backlog課題リンク]]、[[ClipboardContent]]
+
+### パンくずの折りたたみ
+
+**定義**: OneDrive/SharePointのパンくずUIが、階層が深いときに起点側の階層を📁アイコン(オーバーフローメニュー)にまとめて隠す挙動
+
+**説明**: 折りたたまれた階層はメニューを開くまでDOMに描画されないため読めない。この状態で先頭の可視要素を起点とみなすと、
+`■勉強会資料 > ■勉強会資料 > …`のように起点が消えて先頭フォルダーが重複する(実際に発生した不具合)
+
+**関連用語**: [[BreadcrumbRootLabelReader]]
 
 ## 技術用語
 

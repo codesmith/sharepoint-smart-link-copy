@@ -52,9 +52,9 @@ function showErrorToast(message: string): void {
 // 名前を、右クリック直前のスナップショットから取得してパンくずの下に列挙する。
 // URLの`id`パラメータから起点(ドキュメントライブラリ名)を特定できるが、SharePointでは複数サイトで
 // 同じライブラリ名(「Shared Documents」等)が重複しやすい。OneDrive/SharePoint共通のパンくずUI
-// (`[data-automationid="breadcrumb-crumb"]`)の先頭要素は、OneDriveなら「マイファイル」、SharePointなら
-// サイト名を表示しているため、取得できた場合はそちらを起点ラベルとして優先する
-// (取得できない場合は従来通りURLベースの起点のまま)。
+// (`[data-automationid="breadcrumb-crumb"]`)の起点側には、OneDriveなら「マイファイル」、SharePointなら
+// サイト名が表示されているため、取得できた場合はそちらを起点ラベルとして優先する。
+// 階層が深いとパンくずUIの起点側が折りたたまれて読めないため、その場合はURLベースの起点のままにする。
 function buildSharePointContent(): ClipboardContent {
   const context = resolvePageContext(window.location.href);
   if (!context) {
@@ -65,7 +65,7 @@ function buildSharePointContent(): ClipboardContent {
   }
 
   let segments = buildAncestorFolders(context);
-  const rootLabel = readBreadcrumbRootLabel(document);
+  const rootLabel = readBreadcrumbRootLabel(document, segments);
   // 実機でDOM構造が想定と異なり起点ラベルを取得できない場合の切り分け用
   console.debug('[Smart Link Copy] 起点ラベル', rootLabel);
   if (rootLabel) {

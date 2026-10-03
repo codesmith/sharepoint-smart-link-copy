@@ -40,7 +40,7 @@ describe('Smart Link Copy(パンくずUIからの起点ラベル取得)', () => 
     // When: 実行
     const context = resolvePageContext(url);
     let segments = buildAncestorFolders(context!);
-    const rootLabel = readBreadcrumbRootLabel(dom);
+    const rootLabel = readBreadcrumbRootLabel(dom, segments);
     if (rootLabel) {
       segments = replaceRootLabel(segments, rootLabel);
     }
@@ -57,13 +57,15 @@ describe('Smart Link Copy(パンくずUIからの起点ラベル取得)', () => 
       'https://contoso.sharepoint.com/sites/Sales/Documents/Forms/AllItems.aspx?id=' +
       encodeURIComponent('/sites/Sales/Documents/2025年度/議事録');
     const dom = createDom(
-      '<button data-automationid="breadcrumb-crumb"><span title="営業部サイト">営業部サイト</span></button>'
+      '<button data-automationid="breadcrumb-crumb"><span title="営業部サイト">営業部サイト</span></button>' +
+        '<button data-automationid="breadcrumb-crumb"><span title="2025年度">2025年度</span></button>' +
+        '<button data-automationid="breadcrumb-crumb"><span title="議事録">議事録</span></button>'
     );
 
     // When: 実行
     const context = resolvePageContext(url);
     let segments = buildAncestorFolders(context!);
-    const rootLabel = readBreadcrumbRootLabel(dom);
+    const rootLabel = readBreadcrumbRootLabel(dom, segments);
     if (rootLabel) {
       segments = replaceRootLabel(segments, rootLabel);
     }
@@ -85,7 +87,7 @@ describe('Smart Link Copy(パンくずUIからの起点ラベル取得)', () => 
     // When: 実行
     const context = resolvePageContext(url);
     let segments = buildAncestorFolders(context!);
-    const rootLabel = readBreadcrumbRootLabel(dom);
+    const rootLabel = readBreadcrumbRootLabel(dom, segments);
     if (rootLabel) {
       segments = replaceRootLabel(segments, rootLabel);
     }
@@ -94,5 +96,38 @@ describe('Smart Link Copy(パンくずUIからの起点ラベル取得)', () => 
     // Then: 検証
     expect(rootLabel).toBeNull();
     expect(result.text).toBe('Documents > 2025年度');
+  });
+
+  it('階層が深くパンくずUIの起点側が折りたたまれている場合、先頭の可視フォルダーを起点と誤認せず、URLベースの起点からのパンくずになる', () => {
+    // Given: 準備(📁(オーバーフロー。breadcrumb-crumbではない) > ■勉強会資料 > 問題無いか > 確認してください。 > いいですか？)
+    const url =
+      'https://onedrive.live.com/my?id=' +
+      encodeURIComponent(
+        '/personal/00d5c5517f1d115b/Documents/■勉強会資料/問題無いか/確認してください。/いいですか？'
+      );
+    const dom = createDom(`
+      <ol data-automationid="breadcrumb-root-id">
+        <li><button aria-label="その他の項目"><i data-icon-name="FabricFolder"></i></button></li>
+        <li><button data-automationid="breadcrumb-crumb"><span title="■勉強会資料">■勉強会...</span></button></li>
+        <li><button data-automationid="breadcrumb-crumb"><span title="問題無いか">問題無いか</span></button></li>
+        <li><button data-automationid="breadcrumb-crumb"><span title="確認してください。">確認して...</span></button></li>
+        <li><h1><button data-automationid="breadcrumb-crumb"><span title="いいですか？">いいですか？</span></button></h1></li>
+      </ol>
+    `);
+
+    // When: 実行
+    const context = resolvePageContext(url);
+    let segments = buildAncestorFolders(context!);
+    const rootLabel = readBreadcrumbRootLabel(dom, segments);
+    if (rootLabel) {
+      segments = replaceRootLabel(segments, rootLabel);
+    }
+    const result = buildBreadcrumbResult(segments);
+
+    // Then: 検証
+    expect(rootLabel).toBeNull();
+    expect(result.text).toBe(
+      'マイファイル > ■勉強会資料 > 問題無いか > 確認してください。 > いいですか？'
+    );
   });
 });

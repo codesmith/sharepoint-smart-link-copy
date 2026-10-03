@@ -237,17 +237,24 @@ function replaceRootLabel(segments: BreadcrumbSegment[], label: string): Breadcr
 
 **責務**:
 - OneDrive/SharePointページ自身が表示しているパンくずUI(Fluent UI製。`[data-automationid="breadcrumb-crumb"]`で
-  各階層の要素を特定できる、実機のDOMキャプチャで確認済みの安定した自動化属性)から、先頭(文書順で最初)の
+  各階層の要素を特定できる、実機のDOMキャプチャで確認済みの安定した自動化属性)から、起点側の
   要素のラベルを読み取る。OneDriveでは「マイファイル」、SharePointではサイト名がここに表示される
+- **階層が深いと、パンくずUIは起点側の階層を📁アイコン(オーバーフローメニュー)に折りたたむ**ため、
+  「先頭の要素=起点」とはみなさない。全要素のラベルを読み、URL由来のフォルダー列と**末尾から照合**して、
+  照合できなかった先頭側の余りの先頭を起点ラベルとする。余りが無ければ起点は折りたたまれているため`null`を返し、
+  起点はURLベースの値(マイファイル/ライブラリ名)のままになる(実行時点のHTMLとURLだけを情報源とし、状態は保持しない)
+  (実機で、先頭の可視フォルダー「■勉強会資料」を起点と誤認し`■勉強会資料 > ■勉強会資料 > …`となる不具合が発生した)
 - URLの`id`パラメータにはSharePointのサイト名そのものが含まれないため(ドキュメントライブラリ名までしか
   分からない)、DOMから読み取る必要がある
-- 先頭の`[data-automationid="breadcrumb-crumb"]`要素の内側にある`[title]`要素のtitle属性を優先し、
-  無ければテキストをそのまま使う
+- 各`[data-automationid="breadcrumb-crumb"]`要素の内側にある`[title]`要素のtitle属性を優先し(表示が「■勉強会...」と
+  省略されていても元の文字列を保持している)、無ければテキストをそのまま使う
 - 取得したテキストは空白を正規化(trim)する。DOM構造が想定外でも例外を投げず、`null`を返す
 
 **インターフェース**:
 ```typescript
-function readBreadcrumbRootLabel(root: ParentNode): string | null;
+function readBreadcrumbLabels(root: ParentNode): string[]; // 全階層のラベル(文書順)
+function selectRootLabel(crumbLabels: string[], segments: BreadcrumbSegment[]): string | null; // 末尾照合(純粋関数)
+function readBreadcrumbRootLabel(root: ParentNode, segments: BreadcrumbSegment[]): string | null; // 上記の組み合わせ
 ```
 
 **依存関係**: OneDrive/SharePointのパンくずUIのDOM構造(`data-automationid`属性)。実機のDOMキャプチャに基づいて
@@ -393,8 +400,8 @@ sequenceDiagram
     Resolver-->>ContentScript: PageContext
     ContentScript->>Resolver: buildAncestorFolders(context)
     Resolver-->>ContentScript: 起点〜現在のフォルダーまでのBreadcrumbSegment[]
-    ContentScript->>RootLabelReader: readBreadcrumbRootLabel(document)
-    RootLabelReader-->>ContentScript: 起点ラベル(マイファイル/サイト名) または null
+    ContentScript->>RootLabelReader: readBreadcrumbRootLabel(document, segments)
+    RootLabelReader-->>ContentScript: 起点ラベル(マイファイル/サイト名) または null(折りたたみ時)
     opt 起点ラベルを取得できた場合
         ContentScript->>Resolver: replaceRootLabel(segments, 起点ラベル)
         Resolver-->>ContentScript: 起点を置き換えたBreadcrumbSegment[]
@@ -502,8 +509,9 @@ stateDiagram-v2
 #### ステップ5: 起点ラベルのパンくずUIラベルへの置き換え
 - ステップ3で決定した起点ラベル(SharePointの場合はドキュメントライブラリ名)は、同じ名前
   (「Shared Documents」等)が複数のSharePointサイトで重複しやすく、どのサイトか分かりにくい
-- `BreadcrumbRootLabelReader.readBreadcrumbRootLabel(document)` で、ページ自身のパンくずUIの先頭要素
-  (OneDriveなら「マイファイル」、SharePointならサイト名)を読み取り、取得できれば
+- `BreadcrumbRootLabelReader.readBreadcrumbRootLabel(document, segments)` で、ページ自身のパンくずUIの全要素を
+  URL由来のフォルダー列と末尾から照合して起点側の要素(OneDriveなら「マイファイル」、SharePointならサイト名)を特定する。
+  取得できれば
   `replaceRootLabel(segments, 取得したラベル)` で起点ラベルを置き換える(`url`は`null`のまま変更しない)
 - 取得できない場合(DOM構造が想定外等)は、ステップ3のURLベースの起点ラベルのままにする
   (パンくずのコピー自体は失敗させない)
@@ -629,8 +637,8 @@ function buildAncestorFolders(context: PageContext): BreadcrumbSegment[] {
   選択アイテム0件/1件/複数件の出力、行頭マーカー`　┗ `、アイテム名のHTMLエスケープ
 - `SelectionReader.readSelectedItemNames`: 選択行のみ抽出、ヘッダー行の除外、名前取得の各フォールバック、
   拡張子が別要素の場合、重複除去、選択なし・想定外構造で空配列
-- `BreadcrumbRootLabelReader.readBreadcrumbRootLabel`: 実際のパンくずDOM構造からの取得、title属性/テキストの
-  フォールバック、見つからない場合に`null`、空白の正規化
+- `BreadcrumbRootLabelReader`: 実際のパンくずDOM構造からの全ラベル取得、title属性/テキストのフォールバック、空白の正規化、
+  末尾照合(起点が見えている/折りたたまれている/SharePointのサイト名+ライブラリ名/同名フォルダー/想定外構造)
 - `SelectionTracker`: 右クリックの`mousedown`後に選択が解除されても、`mousedown`時点の選択が保持されること
 - `BacklogIssueResolver.resolveBacklogIssueContext`: 各ドメイン、課題ページ以外でnull、クエリ・ハッシュの除去
 - `BacklogIssueReader`: 実際の課題ページDOMからの取得、件名欄以外の`.markdown-body`を拾わないこと、各フォールバック
